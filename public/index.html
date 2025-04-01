@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elevator Simulation</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+    #building {
+      position: relative;
+      width: 160px; /* Increased to accommodate floor numbers */
+      height: 700px;
+      border: 1px solid black;
+      overflow: hidden;
+    }
+    canvas {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+    }
+    #controlPanel {
+      margin-top: 20px;
+    }
+    .counter {
+      position: fixed;
+      left:100px;
+      top:0;
+    }
+  </style>
+</head>
+<body>
+  <div class="counter">
+    <p style="padding:0;margin-bottom:5px">start: <span id="startTime"></span></p>
+    <p style="padding:0;margin:0;margin-bottom:5px">finish: <span id="finishTime"></span></p>
+    <p style="padding:0;margin:0;margin-bottom:5px">total time: <span id="gapTime"></span></p>
+    <p style="padding:0;margin:0;margin-bottom:5px">delivered: <span id="counter"></span></p>
+  </div>
+  <div id="building">
+    <canvas id="elevatorCanvas" width="160" height="700"></canvas>
+  </div>
+  <!--<script src="data.js"></script>-->
+  <script src="data_small.js"></script>
+  <script src="helpers.js"></script>
+  <script src="app_main.js"></script>
+</body>
+</html>

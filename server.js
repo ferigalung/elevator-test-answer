@@ -28,12 +28,7 @@ class Elevator {
   }
 
   async moveToFloor(targetFloor, isPickup, isReturn = false) {
-    const distance = Math.abs(this.currentFloor - targetFloor);
-    let waitTime = 100;
-    if (distance > 20) {
-      waitTime = 50;
-    }
-    const travelTime = distance * waitTime;
+    const travelTime = Math.abs(this.currentFloor - targetFloor) * 75;
 
     console.log(`Lift ${this.id} moving from floor ${this.currentFloor} to floor ${targetFloor}`);
     this.io.emit('elevatorMove', { id: this.id, from: this.currentFloor, to: targetFloor, isPickup });

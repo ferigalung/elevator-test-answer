@@ -105,7 +105,7 @@ class ElevatorAnimator {
     }
 
     const direction = Math.sign(elevator.targetFloor - elevator.currentFloor);
-    const speed = this.calculateSpeed(elevator);
+    const speed = this.calculateElevatorSpeed(elevator);
     
     elevator.currentFloor += direction * speed;
     
@@ -113,7 +113,7 @@ class ElevatorAnimator {
     elevator.animationId = requestAnimationFrame(() => this.animate(id));
   }
 
-  calculateSpeed(elevator) {
+  calculateElevatorSpeed(elevator) {
     const distance = Math.abs(elevator.targetFloor - elevator.currentFloor);
     const baseSpeed = 0.25;
     

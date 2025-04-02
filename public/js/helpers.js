@@ -1,4 +1,7 @@
-function getElapsedTime(startTime, finishTime) {
+/* eslint-env browser */
+/* eslint-disable import/prefer-default-export */
+
+export function getElapsedTime(startTime, finishTime) {
     const diff = finishTime - startTime;
     
     const seconds = Math.floor(diff / 1000);

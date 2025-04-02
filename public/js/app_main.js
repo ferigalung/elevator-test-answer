@@ -1,9 +1,9 @@
-const canvas = document.getElementById('elevatorCanvas');
-const ctx = canvas.getContext('2d');
-
+import { getElapsedTime } from './helpers.js';
 
 class ElevatorAnimator {
-  constructor(socket, elevatorCount, peopleCount = 100) {
+  constructor({socket, elevatorCount, peopleCount = 100, canvasID = 'elevatorCanvas'}) {
+    this.canvas = document.getElementById(canvasID);
+    this.ctx = this.canvas.getContext('2d');
     this.elevators = Array.from({ length: elevatorCount }, (_, id) => ({
       id: id,
       currentFloor: 0, 
@@ -16,14 +16,13 @@ class ElevatorAnimator {
     this.elevatorWidth = 10;
     this.elevatorHeight = 13;
     this.deliveredCount = 0;
-    this.startTime = new Date();
+    this.startTime = null;
     this.finishTime = null;
     this.socket = socket;
-    this.peopleQueue = this.generatePeople(peopleCount);
-    console.log(JSON.stringify(this.peopleQueue));
+    this.peopleQueue = this.generatePeopleQueue(peopleCount);
   }
 
-  generatePeople(count) {
+  generatePeopleQueue(count) {
     const usedCombinations = new Set();
     const result = [];
     
@@ -62,14 +61,16 @@ class ElevatorAnimator {
   }
 
   startSimulation() {
-    for (let i = 0; i < this.peopleQueue.length; i++) {
-      const person = this.peopleQueue[i];
-      this.socket.emit('requestFloor', person.from, person.to);
-    }
+    this.peopleQueue.forEach(person => {
+      setTimeout(() => {
+        this.socket.emit('requestFloor', person.from, person.to);
+      }, 1000);
+    });
   }
-
+  
   updateUI(initial = false) {
     if (initial) {
+      this.startTime = new Date();
       document.getElementById("startTime").innerHTML = this.startTime.toLocaleString();
       return;
     }
@@ -77,6 +78,7 @@ class ElevatorAnimator {
     this.deliveredCount += 1;
     
     if (this.deliveredCount === this.peopleQueue.length) {
+      // emit event to return every elevator to 1st floor
       this.socket.emit('returnToLobby');
 
       this.finishTime = new Date();
@@ -91,10 +93,13 @@ class ElevatorAnimator {
     const elevator = this.elevators[id]
     elevator.moving = true
     
+    // if elevator is at the target floor, stop the animation
     if (Math.abs(elevator.currentFloor - elevator.targetFloor) < 0.1) {
       elevator.currentFloor = elevator.targetFloor;
       this.draw();
-      cancelAnimationFrame(elevator.id);
+      if (elevator.animationId) {
+        cancelAnimationFrame(elevator.animationId);
+      }
       elevator.moving = false;
       return;
     }
@@ -105,39 +110,45 @@ class ElevatorAnimator {
     elevator.currentFloor += direction * speed;
     
     this.draw();
-    requestAnimationFrame(() => this.animate(id));
+    elevator.animationId = requestAnimationFrame(() => this.animate(id));
   }
 
   calculateSpeed(elevator) {
     const distance = Math.abs(elevator.targetFloor - elevator.currentFloor);
-    const baseSpeed = 0.1;
+    const baseSpeed = 0.25;
     
+    // acceleration and deceleration based on distance to make it feel more natural
+    if (distance < 0.5) return baseSpeed * 0.3;
     if (distance < 1) return baseSpeed * 0.5;
-    if (distance < 3) return baseSpeed;
-    if (distance < 10) return baseSpeed * 1.5;
-    return baseSpeed * 2;
+    if (distance < 2) return baseSpeed * 0.7;
+    if (distance < 3) return baseSpeed * 0.85;
+    if (distance < 5) return baseSpeed;
+    if (distance < 8) return baseSpeed * 1.2;
+    if (distance < 12) return baseSpeed * 1.4;
+    if (distance < 16) return baseSpeed * 1.6;
+    return baseSpeed * 1.8;
   }
 
   draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
     // Draw floors
-    ctx.fillStyle = 'black';
+    this.ctx.fillStyle = 'black';
     for (let i = 0; i < this.totalFloors; i++) {
-      const y = canvas.height - (i + 1) * this.floorHeight;
-      ctx.fillText(`Floor ${i+1}`, 10, y + this.floorHeight - 2);
+      const y = this.canvas.height - (i + 1) * this.floorHeight;
+      this.ctx.fillText(`Floor ${i+1}`, 10, y + this.floorHeight - 2);
 
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, y);
+      this.ctx.lineTo(this.canvas.width, y);
+      this.ctx.stroke();
     }
     
     // draw separator line
-    ctx.beginPath();
-    ctx.moveTo(110, 0)
-    ctx.lineTo(110, canvas.height)
-    ctx.stroke();
+    this.ctx.beginPath();
+    this.ctx.moveTo(110, 0)
+    this.ctx.lineTo(110, this.canvas.height)
+    this.ctx.stroke();
 
     // Draw elevator and waiting indicator
     let gapBetween = 0;
@@ -146,14 +157,14 @@ class ElevatorAnimator {
         gapBetween = id * 15;
       }
       const xPos = 55 + gapBetween;
-      const yPos = canvas.height - (elevator.currentFloor + 1) * this.floorHeight;
+      const yPos = this.canvas.height - (elevator.currentFloor + 1) * this.floorHeight;
       
-      ctx.fillStyle = 'red';
-      ctx.fillRect(xPos, yPos, this.elevatorWidth, this.elevatorHeight);
+      this.ctx.fillStyle = 'red';
+      this.ctx.fillRect(xPos, yPos, this.elevatorWidth, this.elevatorHeight);
       
       // Draw waiting text
       if (elevator.isPickup) {
-        ctx.fillText('Waiting', 115, canvas.height - (elevator.targetFloor * this.floorHeight) - 2);
+        this.ctx.fillText('Waiting', 115, this.canvas.height - (elevator.targetFloor * this.floorHeight) - 2);
       }
     });
   }
@@ -161,7 +172,7 @@ class ElevatorAnimator {
 
 // Initialize elevator animator
 const socket = io();
-const animators = new ElevatorAnimator(socket, 3, 20);
+const animators = new ElevatorAnimator({socket, elevatorCount: 3, peopleCount: 100, canvasID: 'elevatorCanvas'});
 animators.initializeSocketListeners();
 animators.draw();
 animators.updateUI(true);

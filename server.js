@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 class Elevator {
   constructor(io, id) {
     this.id = id;
-    this.currentFloor = 0;
+    this.currentFloor = 1;
     this.requests = [];
     this.moving = false;
     this.io = io;
@@ -28,7 +28,13 @@ class Elevator {
   }
 
   async moveToFloor(targetFloor, isPickup, isReturn = false) {
-    const travelTime = Math.abs(this.currentFloor - targetFloor) * 200;
+    const distance = Math.abs(this.currentFloor - targetFloor);
+    let waitTime = 100;
+    if (distance > 20) {
+      waitTime = 50;
+    }
+    const travelTime = distance * waitTime;
+
     console.log(`Lift ${this.id} moving from floor ${this.currentFloor} to floor ${targetFloor}`);
     this.io.emit('elevatorMove', { id: this.id, from: this.currentFloor, to: targetFloor, isPickup });
     await new Promise(resolve => setTimeout(resolve, travelTime));
@@ -63,7 +69,7 @@ io.on('connection', (socket) => {
 
     socket.on('returnToLobby', () => {
       elevators.forEach(elevator => elevator.returnToLobby());
-  });
+    });
 
     socket.on('disconnect', () => {
         console.log('Client disconnected');
@@ -75,9 +81,9 @@ const findBestElevator = (targetFloor) => {
     const distance = Math.abs(elevator.currentFloor - targetFloor);
     const queueLength = elevator.requests.length;
     
-    let score = distance * 2;
-    score += queueLength * 3;
-    score += elevator.moving ? 5 : 0;
+    let score = distance * 3;
+    score += queueLength * 5;
+    score += elevator.moving ? 15 : 0;
     
     return {
       elevator,

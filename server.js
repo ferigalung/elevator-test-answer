@@ -22,26 +22,27 @@ class Elevator {
     while (this.requests.length > 0) {
       const nextRequest = this.requests.shift();
       await this.moveToFloor(nextRequest.targetFloor, nextRequest.isPickup);
-      // this.returnToLobby();
     }
     this.moving = false;
     console.log(`Lift ${this.id} finished processing requests`);
   }
 
-  async moveToFloor(targetFloor, isPickup) {
+  async moveToFloor(targetFloor, isPickup, isReturn = false) {
     const travelTime = Math.abs(this.currentFloor - targetFloor) * 200;
     console.log(`Lift ${this.id} moving from floor ${this.currentFloor} to floor ${targetFloor}`);
     this.io.emit('elevatorMove', { id: this.id, from: this.currentFloor, to: targetFloor, isPickup });
     await new Promise(resolve => setTimeout(resolve, travelTime));
     this.currentFloor = targetFloor;
+
     console.log(`Lift ${this.id} arrived at floor ${targetFloor}`);
-    this.io.emit('elevatorArrived', { id: this.id, floor: targetFloor, isPickup });
+    if (!isReturn) {
+      this.io.emit('elevatorArrived', { id: this.id, floor: targetFloor, isPickup });
+    }
   }
 
   returnToLobby() {
     if (this.currentFloor !== 0) {
-      this.requests.push(0);
-      this.processRequests();
+      this.moveToFloor(1, false, true);
     }
   }
 }
@@ -60,19 +61,34 @@ io.on('connection', (socket) => {
         bestElevator.requestFloor(from, to);
     });
 
+    socket.on('returnToLobby', () => {
+      elevators.forEach(elevator => elevator.returnToLobby());
+  });
+
     socket.on('disconnect', () => {
         console.log('Client disconnected');
     });
 });
 
 const findBestElevator = (targetFloor) => {
-  return elevators.reduce((prev, curr) => {
-    const prevDistance = Math.abs(prev.currentFloor - targetFloor);
-    const currDistance = Math.abs(curr.currentFloor - targetFloor);
+  const elevatorScores = elevators.map(elevator => {
+    const distance = Math.abs(elevator.currentFloor - targetFloor);
+    const queueLength = elevator.requests.length;
     
-    return (!prev.moving && curr.moving) ? prev :
-           (prevDistance < currDistance && !prev.moving) ? prev : curr;
+    let score = distance * 2;
+    score += queueLength * 3;
+    score += elevator.moving ? 5 : 0;
+    
+    return {
+      elevator,
+      score
+    };
   });
+
+  // choose the elevator with the lowest score
+  return elevatorScores.reduce((best, current) => 
+    current.score < best.score ? current : best
+  ).elevator;
 }
 
 server.listen(3000, () => console.log('Server running on port 3000'));

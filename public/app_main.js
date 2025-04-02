@@ -3,7 +3,7 @@ const ctx = canvas.getContext('2d');
 
 
 class ElevatorAnimator {
-  constructor(elevatorCount) {
+  constructor(socket, elevatorCount, peopleCount = 100) {
     this.elevators = Array.from({ length: elevatorCount }, (_, id) => ({
       id: id,
       currentFloor: 0, 
@@ -15,6 +15,76 @@ class ElevatorAnimator {
     this.floorHeight = 14;
     this.elevatorWidth = 10;
     this.elevatorHeight = 13;
+    this.deliveredCount = 0;
+    this.startTime = new Date();
+    this.finishTime = null;
+    this.socket = socket;
+    this.peopleQueue = this.generatePeople(peopleCount);
+    console.log(JSON.stringify(this.peopleQueue));
+  }
+
+  generatePeople(count) {
+    const usedCombinations = new Set();
+    const result = [];
+    
+    while (result.length < count) {
+      let from = Math.floor(Math.random() * this.totalFloors) + 1;
+      let to = Math.floor(Math.random() * this.totalFloors) + 1;
+      
+      const combination = `${from}-${to}`;
+      
+      if (from !== to && !usedCombinations.has(combination)) {
+        usedCombinations.add(combination);
+        result.push({ from, to });
+      }
+    }
+    
+    return result;
+  }
+
+  initializeSocketListeners() {
+    this.socket.on('elevatorMove', ({ id, from, to, isPickup }) => {
+      this.elevators[id].currentFloor = from - 1;
+      this.elevators[id].isPickup = isPickup;
+      this.elevators[id].targetFloor = to - 1;
+      this.animate(id);
+    });
+
+    this.socket.on('elevatorArrived', ({ id, floor, isPickup }) => {
+      this.elevators[id].isPickup = isPickup;
+      this.elevators[id].currentFloor = floor - 1;
+      this.draw();
+
+      if (!isPickup) {
+        this.updateUI();
+      }
+    });
+  }
+
+  startSimulation() {
+    for (let i = 0; i < this.peopleQueue.length; i++) {
+      const person = this.peopleQueue[i];
+      this.socket.emit('requestFloor', person.from, person.to);
+    }
+  }
+
+  updateUI(initial = false) {
+    if (initial) {
+      document.getElementById("startTime").innerHTML = this.startTime.toLocaleString();
+      return;
+    }
+    
+    this.deliveredCount += 1;
+    
+    if (this.deliveredCount === this.peopleQueue.length) {
+      this.socket.emit('returnToLobby');
+
+      this.finishTime = new Date();
+      document.getElementById("finishTime").innerHTML = this.finishTime.toLocaleString();
+      document.getElementById("gapTime").innerHTML = getElapsedTime(this.startTime, this.finishTime);
+    }
+    
+    document.getElementById("counter").innerHTML = this.deliveredCount;
   }
 
   animate(id) {
@@ -61,12 +131,13 @@ class ElevatorAnimator {
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(110, y)
-      ctx.lineTo(110, y+canvas.height)
-      ctx.stroke();
     }
+    
+    // draw separator line
+    ctx.beginPath();
+    ctx.moveTo(110, 0)
+    ctx.lineTo(110, canvas.height)
+    ctx.stroke();
 
     // Draw elevator and waiting indicator
     let gapBetween = 0;
@@ -88,37 +159,10 @@ class ElevatorAnimator {
   }
 }
 
-// Socket communication
+// Initialize elevator animator
 const socket = io();
-const animators = new ElevatorAnimator(3);
+const animators = new ElevatorAnimator(socket, 3, 20);
+animators.initializeSocketListeners();
 animators.draw();
-
-socket.on('elevatorMove', ({ id, from, to, isPickup }) => {
-  animators.elevators[id].currentFloor = from - 1;
-  animators.elevators[id].isPickup = isPickup;
-  animators.elevators[id].targetFloor = to - 1;
-  animators.animate(id);
-});
-
-socket.on('elevatorArrived', ({ id, floor, isPickup }) => {
-  animators.elevators[id].isPickup = isPickup;
-  animators.elevators[id].currentFloor = floor - 1;
-  animators.draw();
-});
-
-// Generate 100 people (Requirement 5)
-// function generatePeople(count) {
-//   return Array.from({ length: count }, () => {
-//     let from, to;
-//     do {
-//       from = Math.floor(Math.random() * 50) + 1;
-//       to = Math.floor(Math.random() * 50) + 1;
-//     } while (from === to);
-//     return { from, to };
-//   });
-// }
-
-const peopleQueue = mans;
-peopleQueue.forEach(person => {
-  socket.emit('requestFloor', person.from, person.to)
-});
+animators.updateUI(true);
+animators.startSimulation();

@@ -29,7 +29,3 @@ function getDateTimeSince(target) { // target should be a Date object
     if( sd > 0) out.push( sd+" second"+(sd == 1 ? "" : "s"));
     return out.join(" ");
 }
-
-module.exports = {
-    getDateTimeSince
-}

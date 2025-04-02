@@ -1,61 +1,78 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const { Server } = require('socket.io');
 
 class Elevator {
-  constructor(io) {
+  constructor(io, id) {
+    this.id = id;
     this.currentFloor = 0;
     this.requests = [];
     this.moving = false;
     this.io = io;
   }
 
-  requestFloor(floor) {
-    this.requests.push(floor);
-    if (!this.moving) {
-      this.processRequests();
-    }
+  requestFloor(from, to) {
+    this.requests.push({targetFloor: from, isPickup: true});
+    this.requests.push({targetFloor: to, isPickup: false});
+    if (!this.moving) this.processRequests();
   }
 
   async processRequests() {
     this.moving = true;
     while (this.requests.length > 0) {
-      const nextFloor = this.requests.shift();
-      await this.moveToFloor(nextFloor);
+      const nextRequest = this.requests.shift();
+      await this.moveToFloor(nextRequest.targetFloor, nextRequest.isPickup);
+      // this.returnToLobby();
     }
     this.moving = false;
+    console.log(`Lift ${this.id} finished processing requests`);
   }
 
-  async moveToFloor(floor) {
-    const travelTime = Math.abs(this.currentFloor - floor) * 10; // 1 second per floor
-    console.log(`Moving from floor ${this.currentFloor} to floor ${floor}`);
-    this.io.emit('moving', { from: this.currentFloor, to: floor });
+  async moveToFloor(targetFloor, isPickup) {
+    const travelTime = Math.abs(this.currentFloor - targetFloor) * 200;
+    console.log(`Lift ${this.id} moving from floor ${this.currentFloor} to floor ${targetFloor}`);
+    this.io.emit('elevatorMove', { id: this.id, from: this.currentFloor, to: targetFloor, isPickup });
     await new Promise(resolve => setTimeout(resolve, travelTime));
-    this.currentFloor = floor;
-    console.log(`Arrived at floor ${floor}`);
-    this.io.emit('arrived', { floor: this.currentFloor });
+    this.currentFloor = targetFloor;
+    console.log(`Lift ${this.id} arrived at floor ${targetFloor}`);
+    this.io.emit('elevatorArrived', { id: this.id, floor: targetFloor, isPickup });
+  }
+
+  returnToLobby() {
+    if (this.currentFloor !== 0) {
+      this.requests.push(0);
+      this.processRequests();
+    }
   }
 }
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
-
-const elevator = new Elevator(io);
+const io = new Server(server);
+const elevators = [0, 1, 2].map(id => new Elevator(io, id));
 
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
-  console.log('New client connected');
-  socket.on('requestFloor', (floor) => {
-    elevator.requestFloor(floor);
-  });
+    console.log('New client connected');
+    socket.on('requestFloor', (from, to) => {
+        const bestElevator = findBestElevator(from);
+        bestElevator.requestFloor(from, to);
+    });
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected');
-  });
+    socket.on('disconnect', () => {
+        console.log('Client disconnected');
+    });
 });
 
-server.listen(3000, () => {
-  console.log('Server is listening on port 3000');
-});
+const findBestElevator = (targetFloor) => {
+  return elevators.reduce((prev, curr) => {
+    const prevDistance = Math.abs(prev.currentFloor - targetFloor);
+    const currDistance = Math.abs(curr.currentFloor - targetFloor);
+    
+    return (!prev.moving && curr.moving) ? prev :
+           (prevDistance < currDistance && !prev.moving) ? prev : curr;
+  });
+}
+
+server.listen(3000, () => console.log('Server running on port 3000'));
